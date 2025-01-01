@@ -1,15 +1,24 @@
 import { AssemblyState } from "@defasm/core";
 import { ELFHeader, ELFSection, ProgramHeader, RelocationSection, SectionHeader, StringTable, SymbolTable } from "./elf.js";
 import { pseudoSections, sectionFlags, STT_SECTION } from "@defasm/core/sections.js";
+import { Buffer } from "buffer";
 
-/**
- * @type {Buffer}
- */
-var outBuffer;
+class OutputBuffer {
+    chunks = [];
+    length = 0;
 
-function write(buffer, position)
-{
-    outBuffer.set(buffer, position);
+    write(buffer, position) {
+        this.chunks.push({buffer, position})
+        this.length = Math.max(this.length, position + buffer.length)
+    }
+
+    toUint8Array() {
+        const arr = new Uint8Array(this.length);
+        for (const {buffer, position} of this.chunks) {
+            arr.set(buffer, position);
+        }
+        return arr;
+    }
 }
 
 /**
@@ -17,7 +26,7 @@ function write(buffer, position)
  */
 export function createObject(state)
 {
-    outBuffer = new Buffer();
+    const outBuffer = new OutputBuffer();
 
     /** @type {import("@defasm/core/symbols").Symbol[]} */
     let recordedSymbols = [];
@@ -95,7 +104,7 @@ export function createObject(state)
 
     
     /* Outputting */
-    write(new ELFHeader({
+    outBuffer.write(new ELFHeader({
         EI_MAG: 0x46_4C_45_7F,
         EI_CLASS: state.bitness >> 5,
         EI_DATA: 1,
@@ -114,17 +123,17 @@ export function createObject(state)
 
     // Writing the section buffers
     for(const section of sections)
-        write(section.buffer, section.header.sh_offset);
+        outBuffer.write(section.buffer, section.header.sh_offset);
     
     // Writing the headers
     let index = alignedFileOffset + SectionHeader.size(state.bitness);
     for(const section of sections)
     {
-        write(section.header.dump(state.bitness), index);
+        outBuffer.write(section.header.dump(state.bitness), index);
         index += SectionHeader.size(state.bitness);
     }
     
-    return outBuffer;
+    return outBuffer.toUint8Array();
 }
 
 /**
@@ -132,7 +141,7 @@ export function createObject(state)
  */
 export function createExecutable(state)
 {
-    outBuffer = new Buffer();
+    const outBuffer = new OutputBuffer();
 
     let entryPoint = 0, entrySection = state.sections.find(section => section.name == '.text');
     let programHeaders = [], fileOffset = Math.ceil(ELFHeader.size(state.bitness) / 0x1000) * 0x1000, memoryOffset = 0x400000;
@@ -156,7 +165,7 @@ export function createExecutable(state)
     for(const section of sections)
     {
         const data = section.head.dump();
-        write(data, fileOffset);
+        outBuffer.write(data, fileOffset);
         const header = new ProgramHeader({
             p_type: 1,
             p_flags:
@@ -194,7 +203,7 @@ export function createExecutable(state)
         bss.p_memsz = sectionSize;
     }
     
-    write(new ELFHeader({
+    outBuffer.write(new ELFHeader({
         EI_MAG: 0x46_4C_45_7F,
         EI_CLASS: state.bitness >> 5,
         EI_DATA: 1,
@@ -214,7 +223,7 @@ export function createExecutable(state)
     // Writing the program headers
     for(const header of programHeaders)
     {
-        write(header.dump(state.bitness), fileOffset);
+        outBuffer.write(header.dump(state.bitness), fileOffset);
         fileOffset += ProgramHeader.size(state.bitness);
     }
 
@@ -238,8 +247,8 @@ export function createExecutable(state)
         value = value & (1n << BigInt(reloc.size)) - 1n;
         buffer[`write${bigInt ? 'Big' : ''}${reloc.signed ? '' : 'U'}Int${reloc.size}${reloc.size > 8 ? 'LE' : ''}`](bigInt ? value : Number(value));
 
-        write(buffer, section.programHeader.p_offset + reloc.offset);
+        outBuffer.write(buffer, section.programHeader.p_offset + reloc.offset);
     }
 
-    return outBuffer;
+    return outBuffer.toUint8Array();
 }

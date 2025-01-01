@@ -1,4 +1,5 @@
 import { pseudoSections } from '@defasm/core/sections.js';
+import { Buffer } from "buffer";
 
 const relocTypesAMD64 = {
     NONE      : 0,
