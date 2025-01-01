@@ -1,22 +1,23 @@
 import { AssemblyState } from "@defasm/core";
 import { ELFHeader, ELFSection, ProgramHeader, RelocationSection, SectionHeader, StringTable, SymbolTable } from "./elf.js";
-import fs from "fs";
 import { pseudoSections, sectionFlags, STT_SECTION } from "@defasm/core/sections.js";
 
-var fd = 0;
+/**
+ * @type {Buffer}
+ */
+var outBuffer;
 
 function write(buffer, position)
 {
-    fs.writeSync(fd, buffer, 0, buffer.length, position);
+    outBuffer.set(buffer, position);
 }
 
 /**
- * @param {String} filename
  * @param {AssemblyState} state
  */
-export function createObject(filename, state)
+export function createObject(state)
 {
-    fd = fs.openSync(filename, 'w');
+    outBuffer = new Buffer();
 
     /** @type {import("@defasm/core/symbols").Symbol[]} */
     let recordedSymbols = [];
@@ -122,16 +123,16 @@ export function createObject(filename, state)
         write(section.header.dump(state.bitness), index);
         index += SectionHeader.size(state.bitness);
     }
-    fs.closeSync(fd);
+    
+    return outBuffer;
 }
 
 /**
- * @param {String} filename
  * @param {AssemblyState} state
  */
-export function createExecutable(filename, state)
+export function createExecutable(state)
 {
-    fd = fs.openSync(filename, 'w', 0o755);
+    outBuffer = new Buffer();
 
     let entryPoint = 0, entrySection = state.sections.find(section => section.name == '.text');
     let programHeaders = [], fileOffset = Math.ceil(ELFHeader.size(state.bitness) / 0x1000) * 0x1000, memoryOffset = 0x400000;
@@ -240,5 +241,5 @@ export function createExecutable(filename, state)
         write(buffer, section.programHeader.p_offset + reloc.offset);
     }
 
-    fs.closeSync(fd);
+    return outBuffer;
 }

@@ -25,7 +25,8 @@
   },
   "homepage": "https://github.com/NewDefectus/defasm/tree/master/cli#readme",
   "dependencies": {
-    "@defasm/core": ""
+    "@defasm/core": "",
+    "buffer": "^6.0.3"
   },
   "bin": {
     "defasm": "./cli.js"
